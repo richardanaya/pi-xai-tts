@@ -9,6 +9,16 @@ import playerFactory from "play-sound";
 const execAsync = promisify(exec);
 const CONFIG_PATH = join(homedir(), ".pi", "grok-tts.json");
 
+// Check if a command exists
+async function commandExists(cmd: string): Promise<boolean> {
+  try {
+    await execAsync(`which ${cmd}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Default configuration
 const DEFAULT_VOICE = "leo";
 const DEFAULT_LANGUAGE = "en";
@@ -153,14 +163,17 @@ export default function (pi: ExtensionAPI) {
           await playWithPlayer(tempFile, config.player);
           await unlink(tempFile).catch(() => {});
         } else {
-          // Use play-sound auto-detection
+          // Auto-detect: prefer ffplay if available, otherwise let play-sound choose
+          const ffplayAvailable = await commandExists("ffplay");
+          const playerToUse = ffplayAvailable ? "ffplay" : undefined;
+          
           await new Promise<void>((resolve, reject) => {
-            player.play(tempFile, (err) => {
+            player.play(tempFile, playerToUse ? { player: playerToUse } : {}, (err) => {
               // Clean up temp file
               unlink(tempFile).catch(() => {});
               
               if (err) {
-                reject(new Error(`Audio playback failed: ${err.message}. Try setting "player" in config to one of: afplay, mpg123, paplay, aplay, ffplay, vlc`));
+                reject(new Error(`Audio playback failed: ${err.message}. Try installing ffmpeg (recommended) or set "player" in config to one of: ffplay, afplay, mpg123, paplay, aplay, vlc`));
               } else {
                 resolve();
               }

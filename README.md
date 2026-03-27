@@ -40,12 +40,12 @@ Replace `your-api-key-here` with your actual xAI API key. You can get one at htt
 
 - **language**: BCP-47 language code (e.g., `en`, `zh`, `pt-BR`). Defaults to `en`.
 
-- **player**: Force a specific audio player. Useful if auto-detection picks the wrong one:
+- **player**: Force a specific audio player. Auto-detection prefers ffplay (FFmpeg) if available:
+  - `ffplay` - FFmpeg (default if available - most reliable)
   - `afplay` - macOS built-in
-  - `mpg123` - Linux MP3 player (recommended)
+  - `mpg123` - Linux MP3 player
   - `paplay` - PulseAudio
   - `aplay` - ALSA
-  - `ffplay` - FFmpeg
   - `vlc` - VLC player
 
 ## Usage
