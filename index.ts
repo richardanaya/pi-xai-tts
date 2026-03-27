@@ -6,7 +6,7 @@ import { exec, spawn, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 
 const execAsync = promisify(exec);
-const CONFIG_PATH = join(homedir(), ".pi", "grok-tts.json");
+const CONFIG_PATH = join(homedir(), ".pi", "xai-tts.json");
 
 // Track the current ffplay process for stopping
 let currentPlayback: ChildProcess | null = null;
@@ -199,7 +199,7 @@ export default function (pi: ExtensionAPI) {
         const audioBuffer = await response.arrayBuffer();
         
         // Save to temp file with explicit extension - ensure fully synced before playback
-        const tempFile = join(homedir(), ".pi", "grok-tts-temp.mp3");
+        const tempFile = join(homedir(), ".pi", "xai-tts-temp.mp3");
         await writeFileSynced(tempFile, Buffer.from(audioBuffer));
 
         // Play audio with ffplay

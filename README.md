@@ -1,24 +1,24 @@
-# pi-grok-tts
+# pi-xai-tts
 
-A pi extension that reads aloud the last AI assistant output using Grok's Text-to-Speech API.
+A pi extension that reads aloud the last AI assistant output using xAI's Text-to-Speech API.
 
 ## Installation
 
 Install via npm:
 
 ```bash
-$ pi install npm:pi-grok-tts
+$ pi install npm:pi-xai-tts
 ```
 
 Or install from git:
 
 ```bash
-$ pi install git:github.com/richardanaya/pi-grok-tts
+$ pi install git:github.com/richardanaya/pi-xai-tts
 ```
 
 ## Configuration
 
-Create a JSON file at `~/.pi/grok-tts.json` with your API key:
+Create a JSON file at `~/.pi/xai-tts.json` with your API key:
 
 ```json
 {
@@ -57,7 +57,7 @@ To stop playback early, type `/listen-stop`.
 # Listen to the response
 /listen
 
-# The response will be read aloud using Grok TTS
+# The response will be read aloud using xAI TTS
 
 # Stop playback early if needed
 /listen-stop
@@ -88,6 +88,6 @@ This extension requires **FFmpeg** to be installed, specifically the `ffplay` co
 
 ## API Reference
 
-This extension uses the Grok Text-to-Speech API:
+This extension uses the xAI Text-to-Speech API:
 - Endpoint: `POST https://api.x.ai/v1/tts`
 - Documentation: https://docs.x.ai/developers/model-capabilities/audio/text-to-speech

@@ -1,7 +1,7 @@
 {
-  "name": "pi-grok-tts",
+  "name": "pi-xai-tts",
   "version": "0.0.1",
-  "description": "A pi extension to read aloud the last AI assistant output using Grok TTS",
+  "description": "A pi extension to read aloud the last AI assistant output using xAI TTS",
   "license": "MIT",
   "author": "Richard Anaya",
   "type": "commonjs",
@@ -13,6 +13,5 @@
     "extensions": [
       "./index.ts"
     ]
-  },
-
+  }
 }
