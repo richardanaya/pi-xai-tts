@@ -141,7 +141,7 @@ function stopPlayback(): boolean {
 
 export default function (pi: ExtensionAPI) {
   pi.registerCommand("listen", {
-    description: "Read aloud the last AI assistant message using Grok TTS",
+    description: "Read aloud the last AI assistant message using xAI TTS",
     handler: async (_args, ctx) => {
       // Check for UI availability
       if (!ctx.hasUI) {
@@ -192,7 +192,7 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
-      // Truncate if too long (Grok TTS has 15,000 char limit)
+      // Truncate if too long (xAI TTS has 15,000 char limit)
       const MAX_CHARS = 15000;
       let textToSpeak = lastMessage;
       if (textToSpeak.length > MAX_CHARS) {
@@ -201,10 +201,10 @@ export default function (pi: ExtensionAPI) {
       }
 
       // Notify user
-      ctx.ui.notify("Generating speech with Grok TTS...", "info");
+      ctx.ui.notify("Generating speech with xAI TTS...", "info");
 
       try {
-        // Call Grok TTS API
+        // Call xAI TTS API
         const response = await fetch("https://api.x.ai/v1/tts", {
           method: "POST",
           headers: {
@@ -225,7 +225,7 @@ export default function (pi: ExtensionAPI) {
 
         if (!response.ok) {
           const errorText = await response.text();
-          throw new Error(`Grok TTS API error: ${response.status} ${errorText}`);
+          throw new Error(`xAI TTS API error: ${response.status} ${errorText}`);
         }
 
         // Get audio data
