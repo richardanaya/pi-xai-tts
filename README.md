@@ -44,6 +44,8 @@ Replace `your-api-key-here` with your actual xAI API key. You can get one at htt
 
 After the AI responds to your message, type `/listen` to hear the last assistant message read aloud.
 
+To stop playback early, type `/listen-stop`.
+
 ### Examples
 
 ```
@@ -56,6 +58,9 @@ After the AI responds to your message, type `/listen` to hear the last assistant
 /listen
 
 # The response will be read aloud using Grok TTS
+
+# Stop playback early if needed
+/listen-stop
 ```
 
 ## Requirements

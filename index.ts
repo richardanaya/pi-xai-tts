@@ -2,11 +2,14 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readFile, writeFile, unlink, open } from "node:fs/promises";
-import { exec } from "node:child_process";
+import { exec, spawn, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 
 const execAsync = promisify(exec);
 const CONFIG_PATH = join(homedir(), ".pi", "grok-tts.json");
+
+// Track the current ffplay process for stopping
+let currentPlayback: ChildProcess | null = null;
 
 // Check if a command exists
 async function commandExists(cmd: string): Promise<boolean> {
@@ -62,9 +65,46 @@ function getLastAssistantMessage(ctx: any): string | null {
   return null;
 }
 
-// Play audio with ffplay
+// Play audio with ffplay (spawn for cancellable playback)
 async function playWithFfplay(filePath: string): Promise<void> {
-  await execAsync(`ffplay -nodisp -autoexit -loglevel quiet "${filePath}"`);
+  // Kill any existing playback
+  if (currentPlayback) {
+    currentPlayback.kill();
+    currentPlayback = null;
+  }
+
+  return new Promise((resolve, reject) => {
+    currentPlayback = spawn("ffplay", [
+      "-nodisp",
+      "-autoexit",
+      "-loglevel", "quiet",
+      filePath,
+    ]);
+
+    currentPlayback.on("exit", (code) => {
+      currentPlayback = null;
+      if (code === 0 || code === null) {
+        resolve();
+      } else {
+        reject(new Error(`ffplay exited with code ${code}`));
+      }
+    });
+
+    currentPlayback.on("error", (err) => {
+      currentPlayback = null;
+      reject(err);
+    });
+  });
+}
+
+// Stop current playback
+function stopPlayback(): boolean {
+  if (currentPlayback) {
+    currentPlayback.kill();
+    currentPlayback = null;
+    return true;
+  }
+  return false;
 }
 
 export default function (pi: ExtensionAPI) {
@@ -174,6 +214,17 @@ export default function (pi: ExtensionAPI) {
           `Failed to generate or play speech: ${error instanceof Error ? error.message : String(error)}`,
           "error"
         );
+      }
+    },
+  });
+
+  pi.registerCommand("listen-stop", {
+    description: "Stop the current audio playback",
+    handler: async (_args, ctx) => {
+      if (stopPlayback()) {
+        ctx.ui.notify("Playback stopped", "info");
+      } else {
+        ctx.ui.notify("No audio currently playing", "warning");
       }
     },
   });
