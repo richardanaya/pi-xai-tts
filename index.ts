@@ -2,14 +2,12 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readFile, writeFile, unlink, open } from "node:fs/promises";
-import { exec, spawn, type ChildProcess } from "node:child_process";
+import { exec, spawn } from "node:child_process";
 import { promisify } from "node:util";
 
 const execAsync = promisify(exec);
 const CONFIG_PATH = join(homedir(), ".pi", "xai-tts.json");
-
-// Track the current ffplay process for stopping
-let currentPlayback: ChildProcess | null = null;
+const TEMP_FILE = join(homedir(), ".pi", "xai-tts-temp.mp3");
 
 // Check if a command exists
 async function commandExists(cmd: string): Promise<boolean> {
@@ -65,13 +63,10 @@ function getLastAssistantMessage(ctx: any): string | null {
   return null;
 }
 
-// Track the PID separately for more reliable killing
-let currentPid: number | null = null;
-
-// Play audio with ffplay (spawn for cancellable playback)
+// Play audio with ffplay (detached so it survives extension reloads)
 async function playWithFfplay(filePath: string, speed: number = 1.0): Promise<void> {
-  // Kill any existing playback
-  stopPlayback();
+  // Kill any existing playback first
+  await killExistingPlayback();
 
   const args = [
     "-nodisp",
@@ -87,64 +82,36 @@ async function playWithFfplay(filePath: string, speed: number = 1.0): Promise<vo
   args.push(filePath);
 
   return new Promise((resolve, reject) => {
-    const proc = spawn("ffplay", args);
+    // Spawn detached so it doesn't get killed when extension reloads
+    const proc = spawn("ffplay", args, { 
+      detached: true,
+      stdio: "ignore"
+    });
 
-    currentPlayback = proc;
-    currentPid = proc.pid || null;
-    
-    console.log(`Started ffplay with PID: ${currentPid}`);
+    // Unref so Node doesn't wait for it
+    proc.unref();
 
-    proc.on("exit", (code) => {
-      console.log(`ffplay exited with code: ${code}`);
-      if (currentPlayback === proc) {
-        currentPlayback = null;
-        currentPid = null;
-      }
-      if (code === 0 || code === null) {
-        resolve();
+    // Check if it started successfully
+    setTimeout(() => {
+      if (proc.exitCode !== null && proc.exitCode !== 0) {
+        reject(new Error(`ffplay failed to start with code ${proc.exitCode}`));
       } else {
-        reject(new Error(`ffplay exited with code ${code}`));
+        resolve();
       }
-    });
-
-    proc.on("error", (err) => {
-      if (currentPlayback === proc) {
-        currentPlayback = null;
-        currentPid = null;
-      }
-      reject(err);
-    });
+    }, 100);
   });
 }
 
-// Stop current playback
-function stopPlayback(): boolean {
-  console.log(`stopPlayback called. currentPlayback: ${currentPlayback ? "exists" : "null"}, currentPid: ${currentPid}`);
-  
-  if (currentPlayback && currentPid) {
-    try {
-      console.log(`Killing process ${currentPid}`);
-      // Try SIGTERM first
-      currentPlayback.kill("SIGTERM");
-      
-      // Force kill after 200ms if still running
-      setTimeout(() => {
-        try {
-          process.kill(currentPid!, 0); // Check if still exists
-          console.log(`Process ${currentPid} still alive, force killing`);
-          process.kill(currentPid!, "SIGKILL");
-        } catch {
-          console.log(`Process ${currentPid} already dead`);
-        }
-      }, 200);
-    } catch (err) {
-      console.log(`Error killing process: ${err}`);
-    }
-    currentPlayback = null;
-    currentPid = null;
+// Kill any existing ffplay processes playing our temp file
+async function killExistingPlayback(): Promise<boolean> {
+  try {
+    // Use pkill to find and kill ffplay processes playing our temp file
+    await execAsync(`pkill -f "ffplay.*${TEMP_FILE.replace(/\/g, "\\\\")}"`);
     return true;
+  } catch {
+    // pkill returns error if no processes found, that's fine
+    return false;
   }
-  return false;
 }
 
 export default function (pi: ExtensionAPI) {
@@ -240,14 +207,15 @@ export default function (pi: ExtensionAPI) {
         const audioBuffer = await response.arrayBuffer();
         
         // Save to temp file with explicit extension - ensure fully synced before playback
-        const tempFile = join(homedir(), ".pi", "xai-tts-temp.mp3");
-        await writeFileSynced(tempFile, Buffer.from(audioBuffer));
+        await writeFileSynced(TEMP_FILE, Buffer.from(audioBuffer));
 
         // Play audio with ffplay
-        await playWithFfplay(tempFile, config.speed ?? 1.0);
+        await playWithFfplay(TEMP_FILE, config.speed ?? 1.0);
 
-        // Clean up temp file
-        await unlink(tempFile).catch(() => {});
+        // Clean up temp file after a delay (give it time to start playing)
+        setTimeout(() => {
+          unlink(TEMP_FILE).catch(() => {});
+        }, 5000);
 
         ctx.ui.notify("Finished playing", "success");
       } catch (error) {
@@ -262,9 +230,8 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("listen-stop", {
     description: "Stop the current audio playback",
     handler: async (_args, ctx) => {
-      console.log("listen-stop command triggered");
-      const stopped = stopPlayback();
-      if (stopped) {
+      const killed = await killExistingPlayback();
+      if (killed) {
         ctx.ui.notify("Playback stopped", "info");
       } else {
         ctx.ui.notify("No audio currently playing", "warning");
