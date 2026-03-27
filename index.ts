@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { readFile, writeFile, unlink, open } from "node:fs/promises";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
-import playerFactory from "play-sound";
 
 const execAsync = promisify(exec);
 const CONFIG_PATH = join(homedir(), ".pi", "grok-tts.json");
@@ -63,30 +62,12 @@ function getLastAssistantMessage(ctx: any): string | null {
   return null;
 }
 
-// Play audio with specified player
-async function playWithPlayer(filePath: string, playerCmd: string): Promise<void> {
-  const commands: Record<string, string> = {
-    afplay: `afplay "${filePath}"`,
-    mpg123: `mpg123 -q "${filePath}"`,
-    mpg321: `mpg321 -q "${filePath}"`,
-    paplay: `paplay "${filePath}"`,
-    aplay: `aplay -q "${filePath}"`,
-    ffplay: `ffplay -nodisp -autoexit -loglevel quiet "${filePath}"`,
-    vlc: `vlc "${filePath}" --play-and-exit --quiet`,
-  };
-
-  const command = commands[playerCmd];
-  if (!command) {
-    throw new Error(`Unknown audio player: ${playerCmd}`);
-  }
-
-  await execAsync(command);
+// Play audio with ffplay
+async function playWithFfplay(filePath: string): Promise<void> {
+  await execAsync(`ffplay -nodisp -autoexit -loglevel quiet "${filePath}"`);
 }
 
 export default function (pi: ExtensionAPI) {
-  // Initialize the audio player
-  const player = playerFactory();
-
   pi.registerCommand("listen", {
     description: "Read aloud the last AI assistant message using Grok TTS",
     handler: async (_args, ctx) => {
@@ -96,12 +77,20 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
+      // Check for ffplay
+      if (!(await commandExists("ffplay"))) {
+        ctx.ui.notify(
+          "ffplay not found. Please install FFmpeg: https://ffmpeg.org/download.html",
+          "error"
+        );
+        return;
+      }
+
       // Load configuration
       let config: {
         xaiApiKey?: string;
         voice?: string;
         language?: string;
-        player?: string;
       };
       
       try {
@@ -166,47 +155,18 @@ export default function (pi: ExtensionAPI) {
           throw new Error(`Grok TTS API error: ${response.status} ${errorText}`);
         }
 
-        // Debug: Log response info
-        const contentType = response.headers.get("content-type");
-        console.log(`TTS response: Content-Type=${contentType}`);
-
         // Get audio data
         const audioBuffer = await response.arrayBuffer();
-        console.log(`TTS audio size: ${audioBuffer.byteLength} bytes`);
         
         // Save to temp file with explicit extension - ensure fully synced before playback
         const tempFile = join(homedir(), ".pi", "grok-tts-temp.mp3");
         await writeFileSynced(tempFile, Buffer.from(audioBuffer));
-        console.log(`Audio saved and synced to: ${tempFile}`);
 
-        // Play audio - prefer direct ffplay, fall back to play-sound
-        if (config.player) {
-          // Use manually specified player
-          console.log(`Playing with configured player: ${config.player}`);
-          await playWithPlayer(tempFile, config.player);
-          await unlink(tempFile).catch(() => {});
-        } else if (await commandExists("ffplay")) {
-          // Use direct ffplay (most reliable)
-          console.log("Playing with direct ffplay invocation");
-          await execAsync(`ffplay -nodisp -autoexit -loglevel quiet "${tempFile}"`);
-          await unlink(tempFile).catch(() => {});
-        } else {
-          // Fall back to play-sound auto-detection
-          console.log("Playing with play-sound auto-detection");
-          
-          await new Promise<void>((resolve, reject) => {
-            player.play(tempFile, (err) => {
-              // Clean up temp file
-              unlink(tempFile).catch(() => {});
-              
-              if (err) {
-                reject(new Error(`Audio playback failed: ${err.message}. Try installing ffmpeg (recommended) or set "player" in config to one of: ffplay, afplay, mpg123, paplay, aplay, vlc`));
-              } else {
-                resolve();
-              }
-            });
-          });
-        }
+        // Play audio with ffplay
+        await playWithFfplay(tempFile);
+
+        // Clean up temp file
+        await unlink(tempFile).catch(() => {});
 
         ctx.ui.notify("Finished playing", "success");
       } catch (error) {

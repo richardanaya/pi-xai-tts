@@ -40,14 +40,6 @@ Replace `your-api-key-here` with your actual xAI API key. You can get one at htt
 
 - **language**: BCP-47 language code (e.g., `en`, `zh`, `pt-BR`). Defaults to `en`.
 
-- **player**: Force a specific audio player. Auto-detection prefers ffplay (FFmpeg) if available:
-  - `ffplay` - FFmpeg (default if available - most reliable)
-  - `afplay` - macOS built-in
-  - `mpg123` - Linux MP3 player
-  - `paplay` - PulseAudio
-  - `aplay` - ALSA
-  - `vlc` - VLC player
-
 ## Usage
 
 After the AI responds to your message, type `/listen` to hear the last assistant message read aloud.
@@ -68,10 +60,26 @@ After the AI responds to your message, type `/listen` to hear the last assistant
 
 ## Requirements
 
-This extension requires a system audio player. The `play-sound` package will automatically detect and use one of:
-- **macOS**: `afplay` (built-in)
-- **Linux**: `mpg123`, `paplay` (PulseAudio), `aplay` (ALSA), or VLC
-- **Windows**: `cmdmp3` or VLC (if available)
+This extension requires **FFmpeg** to be installed, specifically the `ffplay` command.
+
+### Installing FFmpeg
+
+- **macOS**:
+  ```bash
+  brew install ffmpeg
+  ```
+
+- **Ubuntu/Debian**:
+  ```bash
+  sudo apt-get install ffmpeg
+  ```
+
+- **Fedora**:
+  ```bash
+  sudo dnf install ffmpeg
+  ```
+
+- **Windows**: Download from https://ffmpeg.org/download.html and add to PATH
 
 ## API Reference
 
