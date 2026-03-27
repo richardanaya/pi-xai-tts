@@ -2,8 +2,11 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readFile, writeFile, unlink } from "node:fs/promises";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import playerFactory from "play-sound";
 
+const execAsync = promisify(exec);
 const CONFIG_PATH = join(homedir(), ".pi", "grok-tts.json");
 
 // Default configuration
@@ -39,6 +42,26 @@ function getLastAssistantMessage(ctx: any): string | null {
   return null;
 }
 
+// Play audio with specified player
+async function playWithPlayer(filePath: string, playerCmd: string): Promise<void> {
+  const commands: Record<string, string> = {
+    afplay: `afplay "${filePath}"`,
+    mpg123: `mpg123 -q "${filePath}"`,
+    mpg321: `mpg321 -q "${filePath}"`,
+    paplay: `paplay "${filePath}"`,
+    aplay: `aplay -q "${filePath}"`,
+    ffplay: `ffplay -nodisp -autoexit -loglevel quiet "${filePath}"`,
+    vlc: `vlc "${filePath}" --play-and-exit --quiet`,
+  };
+
+  const command = commands[playerCmd];
+  if (!command) {
+    throw new Error(`Unknown audio player: ${playerCmd}`);
+  }
+
+  await execAsync(command);
+}
+
 export default function (pi: ExtensionAPI) {
   // Initialize the audio player
   const player = playerFactory();
@@ -57,6 +80,7 @@ export default function (pi: ExtensionAPI) {
         xaiApiKey?: string;
         voice?: string;
         language?: string;
+        player?: string;
       };
       
       try {
@@ -124,18 +148,25 @@ export default function (pi: ExtensionAPI) {
         await writeFile(tempFile, Buffer.from(audioBuffer));
 
         // Play audio
-        await new Promise<void>((resolve, reject) => {
-          player.play(tempFile, (err) => {
-            // Clean up temp file
-            unlink(tempFile).catch(() => {});
-            
-            if (err) {
-              reject(new Error(`Audio playback failed: ${err.message}`));
-            } else {
-              resolve();
-            }
+        if (config.player) {
+          // Use manually specified player
+          await playWithPlayer(tempFile, config.player);
+          await unlink(tempFile).catch(() => {});
+        } else {
+          // Use play-sound auto-detection
+          await new Promise<void>((resolve, reject) => {
+            player.play(tempFile, (err) => {
+              // Clean up temp file
+              unlink(tempFile).catch(() => {});
+              
+              if (err) {
+                reject(new Error(`Audio playback failed: ${err.message}. Try setting "player" in config to one of: afplay, mpg123, paplay, aplay, ffplay, vlc`));
+              } else {
+                resolve();
+              }
+            });
           });
-        });
+        }
 
         ctx.ui.notify("Finished playing", "success");
       } catch (error) {

@@ -40,6 +40,14 @@ Replace `your-api-key-here` with your actual xAI API key. You can get one at htt
 
 - **language**: BCP-47 language code (e.g., `en`, `zh`, `pt-BR`). Defaults to `en`.
 
+- **player**: Force a specific audio player. Useful if auto-detection picks the wrong one:
+  - `afplay` - macOS built-in
+  - `mpg123` - Linux MP3 player (recommended)
+  - `paplay` - PulseAudio
+  - `aplay` - ALSA
+  - `ffplay` - FFmpeg
+  - `vlc` - VLC player
+
 ## Usage
 
 After the AI responds to your message, type `/listen` to hear the last assistant message read aloud.
