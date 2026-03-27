@@ -7,7 +7,7 @@ import playerFactory from "play-sound";
 const CONFIG_PATH = join(homedir(), ".pi", "grok-tts.json");
 
 // Default configuration
-const DEFAULT_VOICE = "eve";
+const DEFAULT_VOICE = "leo";
 const DEFAULT_LANGUAGE = "en";
 
 // Get last assistant message from session

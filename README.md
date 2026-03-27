@@ -23,7 +23,7 @@ Create a JSON file at `~/.pi/grok-tts.json` with your API key:
 ```json
 {
   "xaiApiKey": "your-api-key-here",
-  "voice": "eve"
+  "voice": "leo"
 }
 ```
 
@@ -32,11 +32,11 @@ Replace `your-api-key-here` with your actual xAI API key. You can get one at htt
 ### Optional Settings
 
 - **voice**: The voice to use for speech synthesis. Options:
-  - `eve` (default) - Energetic, upbeat
+  - `leo` (default) - Authoritative, strong
+  - `eve` - Energetic, upbeat
   - `ara` - Warm, friendly
   - `rex` - Confident, clear
   - `sal` - Smooth, balanced
-  - `leo` - Authoritative, strong
 
 - **language**: BCP-47 language code (e.g., `en`, `zh`, `pt-BR`). Defaults to `en`.
 
