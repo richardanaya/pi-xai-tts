@@ -91,8 +91,11 @@ async function playWithFfplay(filePath: string, speed: number = 1.0): Promise<vo
 
     currentPlayback = proc;
     currentPid = proc.pid || null;
+    
+    console.log(`Started ffplay with PID: ${currentPid}`);
 
     proc.on("exit", (code) => {
+      console.log(`ffplay exited with code: ${code}`);
       if (currentPlayback === proc) {
         currentPlayback = null;
         currentPid = null;
@@ -116,21 +119,26 @@ async function playWithFfplay(filePath: string, speed: number = 1.0): Promise<vo
 
 // Stop current playback
 function stopPlayback(): boolean {
+  console.log(`stopPlayback called. currentPlayback: ${currentPlayback ? "exists" : "null"}, currentPid: ${currentPid}`);
+  
   if (currentPlayback && currentPid) {
     try {
+      console.log(`Killing process ${currentPid}`);
       // Try SIGTERM first
-      currentPlayback.kill();
+      currentPlayback.kill("SIGTERM");
       
-      // Force kill after 100ms if still running
+      // Force kill after 200ms if still running
       setTimeout(() => {
         try {
+          process.kill(currentPid!, 0); // Check if still exists
+          console.log(`Process ${currentPid} still alive, force killing`);
           process.kill(currentPid!, "SIGKILL");
         } catch {
-          // Process already dead, ignore
+          console.log(`Process ${currentPid} already dead`);
         }
-      }, 100);
-    } catch {
-      // Ignore errors
+      }, 200);
+    } catch (err) {
+      console.log(`Error killing process: ${err}`);
     }
     currentPlayback = null;
     currentPid = null;
@@ -254,7 +262,9 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("listen-stop", {
     description: "Stop the current audio playback",
     handler: async (_args, ctx) => {
-      if (stopPlayback()) {
+      console.log("listen-stop command triggered");
+      const stopped = stopPlayback();
+      if (stopped) {
         ctx.ui.notify("Playback stopped", "info");
       } else {
         ctx.ui.notify("No audio currently playing", "warning");
