@@ -87,7 +87,7 @@ export default function (pi: ExtensionAPI) {
 
       // Load configuration
       let config: {
-        grokApiKey?: string;
+        xaiApiKey?: string;
         voice?: string;
         language?: string;
       };
@@ -97,15 +97,15 @@ export default function (pi: ExtensionAPI) {
         config = JSON.parse(configData);
       } catch (error) {
         ctx.ui.notify(
-          `Failed to load config from ${CONFIG_PATH}. Please create it with your grokApiKey.`,
+          `Failed to load config from ${CONFIG_PATH}. Please create it with your xaiApiKey.`,
           "error"
         );
         return;
       }
 
-      if (!config.grokApiKey) {
+      if (!config.xaiApiKey) {
         ctx.ui.notify(
-          "Missing grokApiKey in configuration file",
+          "Missing xaiApiKey in configuration file",
           "error"
         );
         return;
@@ -144,7 +144,7 @@ export default function (pi: ExtensionAPI) {
         const response = await fetch("https://api.x.ai/v1/tts", {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${config.grokApiKey}`,
+            "Authorization": `Bearer ${config.xaiApiKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({

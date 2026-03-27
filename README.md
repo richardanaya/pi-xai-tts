@@ -22,7 +22,7 @@ Create a JSON file at `~/.pi/grok-tts.json` with your API key:
 
 ```json
 {
-  "grokApiKey": "your-api-key-here",
+  "xaiApiKey": "your-api-key-here",
   "voice": "eve"
 }
 ```
