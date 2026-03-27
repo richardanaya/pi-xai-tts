@@ -106,7 +106,7 @@ async function playWithFfplay(filePath: string, speed: number = 1.0): Promise<vo
 async function killExistingPlayback(): Promise<boolean> {
   try {
     // Use pkill to find and kill ffplay processes playing our temp file
-    await execAsync(`pkill -f "ffplay.*${TEMP_FILE.replace(/\/g, "\\\\")}"`);
+    await execAsync(`pkill -f "ffplay.*xai-tts-temp.mp3"`);
     return true;
   } catch {
     // pkill returns error if no processes found, that's fine
