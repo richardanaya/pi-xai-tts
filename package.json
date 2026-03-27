@@ -1,0 +1,17 @@
+{
+  "name": "pi-grok-tts",
+  "version": "0.0.1",
+  "description": "A pi extension to read aloud the last AI assistant output using Grok TTS",
+  "license": "MIT",
+  "author": "Richard Anaya",
+  "type": "commonjs",
+  "main": "index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
