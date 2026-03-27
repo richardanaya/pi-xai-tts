@@ -60,10 +60,10 @@ After the AI responds to your message, type `/listen` to hear the last assistant
 
 ## Requirements
 
-This extension requires a system audio player:
+This extension requires a system audio player. The `play-sound` package will automatically detect and use one of:
 - **macOS**: `afplay` (built-in)
-- **Linux**: `mpg123`, `paplay` (PulseAudio), or `aplay` (ALSA)
-- **Windows**: Not currently supported (contributions welcome!)
+- **Linux**: `mpg123`, `paplay` (PulseAudio), `aplay` (ALSA), or VLC
+- **Windows**: `cmdmp3` or VLC (if available)
 
 ## API Reference
 

@@ -13,5 +13,8 @@
     "extensions": [
       "./index.ts"
     ]
+  },
+  "dependencies": {
+    "play-sound": "^1.1.6"
   }
 }

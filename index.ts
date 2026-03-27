@@ -2,49 +2,13 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readFile, writeFile, unlink } from "node:fs/promises";
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
+import playerFactory from "play-sound";
 
-const execAsync = promisify(exec);
 const CONFIG_PATH = join(homedir(), ".pi", "grok-tts.json");
 
 // Default configuration
 const DEFAULT_VOICE = "eve";
 const DEFAULT_LANGUAGE = "en";
-
-// Find a suitable audio player
-async function findAudioPlayer(): Promise<string | null> {
-  const players = ["afplay", "mpg123", "paplay", "aplay", "ffplay"];
-  
-  for (const player of players) {
-    try {
-      await execAsync(`which ${player}`);
-      return player;
-    } catch {
-      continue;
-    }
-  }
-  
-  return null;
-}
-
-// Play audio file using system player
-async function playAudio(filePath: string, player: string): Promise<void> {
-  const commands: Record<string, string> = {
-    afplay: `afplay "${filePath}"`,
-    mpg123: `mpg123 -q "${filePath}"`,
-    paplay: `paplay "${filePath}"`,
-    aplay: `aplay -q "${filePath}"`,
-    ffplay: `ffplay -nodisp -autoexit -loglevel quiet "${filePath}"`,
-  };
-
-  const command = commands[player];
-  if (!command) {
-    throw new Error(`Unknown audio player: ${player}`);
-  }
-
-  await execAsync(command);
-}
 
 // Get last assistant message from session
 function getLastAssistantMessage(ctx: any): string | null {
@@ -76,6 +40,9 @@ function getLastAssistantMessage(ctx: any): string | null {
 }
 
 export default function (pi: ExtensionAPI) {
+  // Initialize the audio player
+  const player = playerFactory();
+
   pi.registerCommand("listen", {
     description: "Read aloud the last AI assistant message using Grok TTS",
     handler: async (_args, ctx) => {
@@ -106,16 +73,6 @@ export default function (pi: ExtensionAPI) {
       if (!config.xaiApiKey) {
         ctx.ui.notify(
           "Missing xaiApiKey in configuration file",
-          "error"
-        );
-        return;
-      }
-
-      // Find audio player
-      const player = await findAudioPlayer();
-      if (!player) {
-        ctx.ui.notify(
-          "No audio player found. Please install afplay (macOS), mpg123, paplay, or aplay (Linux).",
           "error"
         );
         return;
@@ -167,10 +124,18 @@ export default function (pi: ExtensionAPI) {
         await writeFile(tempFile, Buffer.from(audioBuffer));
 
         // Play audio
-        await playAudio(tempFile, player);
-
-        // Clean up temp file
-        await unlink(tempFile).catch(() => {});
+        await new Promise<void>((resolve, reject) => {
+          player.play(tempFile, (err) => {
+            // Clean up temp file
+            unlink(tempFile).catch(() => {});
+            
+            if (err) {
+              reject(new Error(`Audio playback failed: ${err.message}`));
+            } else {
+              resolve();
+            }
+          });
+        });
 
         ctx.ui.notify("Finished playing", "success");
       } catch (error) {
