@@ -142,6 +142,11 @@ export default function (pi: ExtensionAPI) {
             text: textToSpeak,
             voice_id: config.voice || DEFAULT_VOICE,
             language: config.language || DEFAULT_LANGUAGE,
+            output_format: {
+              codec: "mp3",
+              sample_rate: 24000,
+              bit_rate: 128000,
+            },
           }),
         });
 
@@ -150,22 +155,31 @@ export default function (pi: ExtensionAPI) {
           throw new Error(`Grok TTS API error: ${response.status} ${errorText}`);
         }
 
+        // Debug: Log response info
+        const contentType = response.headers.get("content-type");
+        console.log(`TTS response: Content-Type=${contentType}`);
+
         // Get audio data
         const audioBuffer = await response.arrayBuffer();
+        console.log(`TTS audio size: ${audioBuffer.byteLength} bytes`);
         
-        // Save to temp file
+        // Save to temp file with explicit extension
         const tempFile = join(homedir(), ".pi", "grok-tts-temp.mp3");
         await writeFile(tempFile, Buffer.from(audioBuffer));
+        console.log(`Audio saved to: ${tempFile}`);
 
         // Play audio
         if (config.player) {
           // Use manually specified player
+          console.log(`Playing with configured player: ${config.player}`);
           await playWithPlayer(tempFile, config.player);
           await unlink(tempFile).catch(() => {});
         } else {
           // Auto-detect: prefer ffplay if available, otherwise let play-sound choose
           const ffplayAvailable = await commandExists("ffplay");
-          const playerToUse = ffplayAvailable ? "ffplay" : undefined;
+          const playerToUse = ffplayAvailable ? "ffplay" : player.player;
+          
+          console.log(`Playing with auto-detected player: ${playerToUse || "play-sound default"}`);
           
           await new Promise<void>((resolve, reject) => {
             player.play(tempFile, playerToUse ? { player: playerToUse } : {}, (err) => {
