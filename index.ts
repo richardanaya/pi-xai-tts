@@ -65,24 +65,30 @@ function getLastAssistantMessage(ctx: any): string | null {
   return null;
 }
 
+// Track the PID separately for more reliable killing
+let currentPid: number | null = null;
+
 // Play audio with ffplay (spawn for cancellable playback)
 async function playWithFfplay(filePath: string): Promise<void> {
   // Kill any existing playback
-  if (currentPlayback) {
-    currentPlayback.kill();
-    currentPlayback = null;
-  }
+  stopPlayback();
 
   return new Promise((resolve, reject) => {
-    currentPlayback = spawn("ffplay", [
+    const proc = spawn("ffplay", [
       "-nodisp",
       "-autoexit",
       "-loglevel", "quiet",
       filePath,
     ]);
 
-    currentPlayback.on("exit", (code) => {
-      currentPlayback = null;
+    currentPlayback = proc;
+    currentPid = proc.pid || null;
+
+    proc.on("exit", (code) => {
+      if (currentPlayback === proc) {
+        currentPlayback = null;
+        currentPid = null;
+      }
       if (code === 0 || code === null) {
         resolve();
       } else {
@@ -90,8 +96,11 @@ async function playWithFfplay(filePath: string): Promise<void> {
       }
     });
 
-    currentPlayback.on("error", (err) => {
-      currentPlayback = null;
+    proc.on("error", (err) => {
+      if (currentPlayback === proc) {
+        currentPlayback = null;
+        currentPid = null;
+      }
       reject(err);
     });
   });
@@ -99,9 +108,24 @@ async function playWithFfplay(filePath: string): Promise<void> {
 
 // Stop current playback
 function stopPlayback(): boolean {
-  if (currentPlayback) {
-    currentPlayback.kill();
+  if (currentPlayback && currentPid) {
+    try {
+      // Try SIGTERM first
+      currentPlayback.kill();
+      
+      // Force kill after 100ms if still running
+      setTimeout(() => {
+        try {
+          process.kill(currentPid!, "SIGKILL");
+        } catch {
+          // Process already dead, ignore
+        }
+      }, 100);
+    } catch {
+      // Ignore errors
+    }
     currentPlayback = null;
+    currentPid = null;
     return true;
   }
   return false;
