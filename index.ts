@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { readFile, writeFile, unlink } from "node:fs/promises";
+import { readFile, writeFile, unlink, open } from "node:fs/promises";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import playerFactory from "play-sound";
@@ -16,6 +16,17 @@ async function commandExists(cmd: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+// Write file and ensure it's fully synced to disk
+async function writeFileSynced(path: string, data: Buffer): Promise<void> {
+  const fd = await open(path, "w");
+  try {
+    await fd.write(data);
+    await fd.sync(); // Ensure data is written to disk
+  } finally {
+    await fd.close();
   }
 }
 
@@ -163,26 +174,28 @@ export default function (pi: ExtensionAPI) {
         const audioBuffer = await response.arrayBuffer();
         console.log(`TTS audio size: ${audioBuffer.byteLength} bytes`);
         
-        // Save to temp file with explicit extension
+        // Save to temp file with explicit extension - ensure fully synced before playback
         const tempFile = join(homedir(), ".pi", "grok-tts-temp.mp3");
-        await writeFile(tempFile, Buffer.from(audioBuffer));
-        console.log(`Audio saved to: ${tempFile}`);
+        await writeFileSynced(tempFile, Buffer.from(audioBuffer));
+        console.log(`Audio saved and synced to: ${tempFile}`);
 
-        // Play audio
+        // Play audio - prefer direct ffplay, fall back to play-sound
         if (config.player) {
           // Use manually specified player
           console.log(`Playing with configured player: ${config.player}`);
           await playWithPlayer(tempFile, config.player);
           await unlink(tempFile).catch(() => {});
+        } else if (await commandExists("ffplay")) {
+          // Use direct ffplay (most reliable)
+          console.log("Playing with direct ffplay invocation");
+          await execAsync(`ffplay -nodisp -autoexit -loglevel quiet "${tempFile}"`);
+          await unlink(tempFile).catch(() => {});
         } else {
-          // Auto-detect: prefer ffplay if available, otherwise let play-sound choose
-          const ffplayAvailable = await commandExists("ffplay");
-          const playerToUse = ffplayAvailable ? "ffplay" : player.player;
-          
-          console.log(`Playing with auto-detected player: ${playerToUse || "play-sound default"}`);
+          // Fall back to play-sound auto-detection
+          console.log("Playing with play-sound auto-detection");
           
           await new Promise<void>((resolve, reject) => {
-            player.play(tempFile, playerToUse ? { player: playerToUse } : {}, (err) => {
+            player.play(tempFile, (err) => {
               // Clean up temp file
               unlink(tempFile).catch(() => {});
               
