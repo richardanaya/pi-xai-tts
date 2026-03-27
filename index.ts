@@ -69,17 +69,25 @@ function getLastAssistantMessage(ctx: any): string | null {
 let currentPid: number | null = null;
 
 // Play audio with ffplay (spawn for cancellable playback)
-async function playWithFfplay(filePath: string): Promise<void> {
+async function playWithFfplay(filePath: string, speed: number = 1.0): Promise<void> {
   // Kill any existing playback
   stopPlayback();
 
+  const args = [
+    "-nodisp",
+    "-autoexit",
+    "-loglevel", "quiet",
+  ];
+
+  // Add speed filter if not default speed
+  if (speed !== 1.0) {
+    args.push("-af", `atempo=${speed}`);
+  }
+
+  args.push(filePath);
+
   return new Promise((resolve, reject) => {
-    const proc = spawn("ffplay", [
-      "-nodisp",
-      "-autoexit",
-      "-loglevel", "quiet",
-      filePath,
-    ]);
+    const proc = spawn("ffplay", args);
 
     currentPlayback = proc;
     currentPid = proc.pid || null;
@@ -155,6 +163,7 @@ export default function (pi: ExtensionAPI) {
         xaiApiKey?: string;
         voice?: string;
         language?: string;
+        speed?: number;
       };
       
       try {
@@ -227,7 +236,7 @@ export default function (pi: ExtensionAPI) {
         await writeFileSynced(tempFile, Buffer.from(audioBuffer));
 
         // Play audio with ffplay
-        await playWithFfplay(tempFile);
+        await playWithFfplay(tempFile, config.speed ?? 1.0);
 
         // Clean up temp file
         await unlink(tempFile).catch(() => {});

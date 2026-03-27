@@ -40,6 +40,8 @@ Replace `your-api-key-here` with your actual xAI API key. You can get one at htt
 
 - **language**: BCP-47 language code (e.g., `en`, `zh`, `pt-BR`). Defaults to `en`.
 
+- **speed**: Playback speed multiplier (e.g., `0.5` for half speed, `1.5` for 1.5x speed, `2.0` for double speed). Defaults to `1.0` (normal speed). Range: `0.5` to `2.0`.
+
 ## Usage
 
 After the AI responds to your message, type `/listen` to hear the last assistant message read aloud.
