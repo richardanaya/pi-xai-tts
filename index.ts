@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { isKeyRelease, Key, matchesKey } from "@mariozechner/pi-tui";
+import { Key, matchesKey } from "@mariozechner/pi-tui";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readFile, writeFile, unlink, open } from "node:fs/promises";
@@ -146,7 +146,7 @@ export default function (pi: ExtensionAPI) {
       "mic",
       [
         `┌──────────────────────────────────────────────────────┐`,
-        `│  🎤  Recording voice...  release Ctrl+M to send  🎤  │`,
+        `│  🎤  Recording voice...  press F12 to stop & send  🎤  │`,
         `└──────────────────────────────────────────────────────┘`,
       ],
       { placement: "aboveEditor" }
@@ -202,7 +202,7 @@ export default function (pi: ExtensionAPI) {
     });
 
     isRecording = true;
-    ctx.ui.notify("🎤 Recording... release Ctrl+M to send", "info");
+    ctx.ui.notify("🎤 Recording... press F12 to stop and send", "info");
     startVisualizer(ctx);
   }
 
@@ -274,20 +274,15 @@ export default function (pi: ExtensionAPI) {
     if (!ctx.hasUI) return;
 
     micInputUnsub = ctx.ui.onTerminalInput((data) => {
-      if (!isRecording) {
-        if (matchesKey(data, Key.ctrl("m"))) {
+      if (matchesKey(data, Key.f12)) {
+        if (isRecording) {
+          void stopRecordingAndSend(ctx);
+        } else {
           void startRecording(ctx);
-          return { consume: true };
         }
-        return undefined;
-      }
-
-      // Recording in progress — consume all keystrokes so the user doesn't type into the editor
-      if (isKeyRelease(data) && matchesKey(data, Key.ctrl("m"))) {
-        void stopRecordingAndSend(ctx);
         return { consume: true };
       }
-      return { consume: true };
+      return undefined;
     });
   });
 

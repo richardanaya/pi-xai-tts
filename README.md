@@ -50,7 +50,7 @@ To stop playback early, type `/listen-stop`.
 
 ### Voice Input (Speech-to-Text)
 
-Hold **Ctrl+M** to record your voice. Release to stop — the audio is transcribed via xAI and sent as your prompt.
+Press **F12** to start recording your voice. Press **F12** again to stop — the audio is transcribed via xAI and sent as your prompt.
 
 ### Accent / Dialect Mode
 
@@ -82,7 +82,7 @@ The accent is persisted in your config file and injected into the system prompt 
 # Stop playback early if needed
 /listen-stop
 
-# Hold Ctrl+M, speak, then release to transcribe and send
+# Press F12, speak, then press F12 again to transcribe and send
 
 # Enable pirate speak for all future responses
 /add-accent talk like a pirate
