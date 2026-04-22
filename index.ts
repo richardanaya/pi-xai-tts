@@ -9,6 +9,27 @@ const execAsync = promisify(exec);
 const CONFIG_PATH = join(homedir(), ".pi", "xai-tts.json");
 const TEMP_FILE = join(homedir(), ".pi", "xai-tts-temp.mp3");
 
+// Load config from disk
+async function loadConfig(): Promise<{
+  xaiApiKey?: string;
+  voice?: string;
+  language?: string;
+  speed?: number;
+  accent?: string;
+}> {
+  try {
+    const data = await readFile(CONFIG_PATH, "utf8");
+    return JSON.parse(data);
+  } catch {
+    return {};
+  }
+}
+
+// Save config to disk
+async function saveConfig(config: Record<string, unknown>): Promise<void> {
+  await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
+}
+
 // Check if a command exists
 async function commandExists(cmd: string): Promise<boolean> {
   try {
@@ -115,6 +136,63 @@ async function killExistingPlayback(): Promise<boolean> {
 }
 
 export default function (pi: ExtensionAPI) {
+  pi.registerCommand("add-accent", {
+    description: "Add a speaking accent/dialect to the AI's responses (e.g., 'talk like a pirate')",
+    handler: async (args, ctx) => {
+      if (!ctx.hasUI) {
+        console.error("/add-accent is only available in interactive mode");
+        return;
+      }
+
+      const description = args.trim();
+      if (!description) {
+        ctx.ui.notify("Usage: /add-accent <description> — e.g., /add-accent talk like a pirate", "warning");
+        return;
+      }
+
+      const config = await loadConfig();
+      config.accent = description;
+      await saveConfig(config);
+
+      ctx.ui.notify(`Accent set: "${description}"`, "success");
+    },
+  });
+
+  pi.registerCommand("remove-accent", {
+    description: "Remove the active speaking accent/dialect",
+    handler: async (_args, ctx) => {
+      if (!ctx.hasUI) {
+        console.error("/remove-accent is only available in interactive mode");
+        return;
+      }
+
+      const config = await loadConfig();
+      if (config.accent) {
+        delete config.accent;
+        await saveConfig(config);
+        ctx.ui.notify("Accent removed", "info");
+      } else {
+        ctx.ui.notify("No accent is currently set", "warning");
+      }
+    },
+  });
+
+  // Inject accent instructions into the system prompt before each agent turn
+  pi.on("before_agent_start", async (event) => {
+    const config = await loadConfig();
+    if (config.accent) {
+      return {
+        systemPrompt:
+          event.systemPrompt +
+          `
+
+IMPORTANT: When writing any text that will be spoken aloud (including explanations, summaries, or responses to the user), you must adopt the following speaking style for ALL responses: ${config.accent}. Write everything in a natural, conversational way that sounds authentic when read aloud. Do not break character. Still complete the actual task correctly.
+`,
+      };
+    }
+    return undefined;
+  });
+
   pi.registerCommand("listen", {
     description: "Read aloud the last AI assistant message using xAI TTS",
     handler: async (_args, ctx) => {
@@ -134,17 +212,9 @@ export default function (pi: ExtensionAPI) {
       }
 
       // Load configuration
-      let config: {
-        xaiApiKey?: string;
-        voice?: string;
-        language?: string;
-        speed?: number;
-      };
+      const config = await loadConfig();
       
-      try {
-        const configData = await readFile(CONFIG_PATH, "utf8");
-        config = JSON.parse(configData);
-      } catch (error) {
+      if (!config.xaiApiKey && !Object.keys(config).length) {
         ctx.ui.notify(
           `Failed to load config from ${CONFIG_PATH}. Please create it with your xaiApiKey.`,
           "error"

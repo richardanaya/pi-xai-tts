@@ -48,6 +48,20 @@ After the AI responds to your message, type `/listen` to hear the last assistant
 
 To stop playback early, type `/listen-stop`.
 
+### Accent / Dialect Mode
+
+To make the AI speak with a specific accent or dialect (affecting both text responses and TTS output):
+
+```
+# Make the AI talk like a pirate
+/add-accent talk like a pirate
+
+# Remove the accent
+/remove-accent
+```
+
+The accent is persisted in your config file and injected into the system prompt before every agent turn, so the AI writes in character for all responses. This makes TTS output sound natural and consistent.
+
 ### Examples
 
 ```
@@ -63,6 +77,12 @@ To stop playback early, type `/listen-stop`.
 
 # Stop playback early if needed
 /listen-stop
+
+# Enable pirate speak for all future responses
+/add-accent talk like a pirate
+
+# Remove it later
+/remove-accent
 ```
 
 ## Requirements
