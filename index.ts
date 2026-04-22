@@ -141,41 +141,19 @@ export default function (pi: ExtensionAPI) {
   let isRecording = false;
   let recordingProcess: ChildProcess | null = null;
   let micInputUnsub: (() => void) | null = null;
-  let micVisualizerTimer: ReturnType<typeof setInterval> | null = null;
-
-  const VISUALIZER_FRAMES = [
-    "▮▯▯▯▯",
-    "▮▮▯▯▯",
-    "▮▮▮▯▯",
-    "▮▮▮▮▯",
-    "▮▮▮▮▮",
-    "▮▮▮▮▯",
-    "▮▮▮▯▯",
-    "▮▮▯▯▯",
-  ];
-
   function startVisualizer(ctx: any): void {
-    let frame = 0;
-    micVisualizerTimer = setInterval(() => {
-      const bars = VISUALIZER_FRAMES[frame % VISUALIZER_FRAMES.length];
-      ctx.ui.setWidget(
-        "mic",
-        [
-          `┌─────────────────────────────────────────────┐`,
-          `│  🎤  Recording...   ${bars}   release Ctrl+M to send  │`,
-          `└─────────────────────────────────────────────┘`,
-        ],
-        { placement: "aboveEditor" }
-      );
-      frame++;
-    }, 150);
+    ctx.ui.setWidget(
+      "mic",
+      [
+        `┌──────────────────────────────────────────────────────┐`,
+        `│  🎤  Recording voice...  release Ctrl+M to send  🎤  │`,
+        `└──────────────────────────────────────────────────────┘`,
+      ],
+      { placement: "aboveEditor" }
+    );
   }
 
   function stopVisualizer(ctx: any): void {
-    if (micVisualizerTimer) {
-      clearInterval(micVisualizerTimer);
-      micVisualizerTimer = null;
-    }
     ctx.ui.setWidget("mic", undefined);
   }
 
