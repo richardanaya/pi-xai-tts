@@ -141,6 +141,43 @@ export default function (pi: ExtensionAPI) {
   let isRecording = false;
   let recordingProcess: ChildProcess | null = null;
   let micInputUnsub: (() => void) | null = null;
+  let micVisualizerTimer: ReturnType<typeof setInterval> | null = null;
+
+  const VISUALIZER_FRAMES = [
+    "▮▯▯▯▯",
+    "▮▮▯▯▯",
+    "▮▮▮▯▯",
+    "▮▮▮▮▯",
+    "▮▮▮▮▮",
+    "▮▮▮▮▯",
+    "▮▮▮▯▯",
+    "▮▮▯▯▯",
+  ];
+
+  function startVisualizer(ctx: any): void {
+    let frame = 0;
+    micVisualizerTimer = setInterval(() => {
+      const bars = VISUALIZER_FRAMES[frame % VISUALIZER_FRAMES.length];
+      ctx.ui.setWidget(
+        "mic",
+        [
+          `┌─────────────────────────────────────────────┐`,
+          `│  🎤  Recording...   ${bars}   release Ctrl+M to send  │`,
+          `└─────────────────────────────────────────────┘`,
+        ],
+        { placement: "aboveEditor" }
+      );
+      frame++;
+    }, 150);
+  }
+
+  function stopVisualizer(ctx: any): void {
+    if (micVisualizerTimer) {
+      clearInterval(micVisualizerTimer);
+      micVisualizerTimer = null;
+    }
+    ctx.ui.setWidget("mic", undefined);
+  }
 
   async function startRecording(ctx: any): Promise<void> {
     if (isRecording) return;
@@ -179,7 +216,7 @@ export default function (pi: ExtensionAPI) {
 
     recordingProcess.on("error", () => {
       isRecording = false;
-      ctx.ui.setStatus("mic", undefined);
+      stopVisualizer(ctx);
     });
 
     recordingProcess.on("exit", () => {
@@ -188,7 +225,7 @@ export default function (pi: ExtensionAPI) {
 
     isRecording = true;
     ctx.ui.notify("🎤 Recording... release Ctrl+M to send", "info");
-    ctx.ui.setStatus("mic", "🎤 Recording...");
+    startVisualizer(ctx);
   }
 
   async function stopRecordingAndSend(ctx: any): Promise<void> {
@@ -197,7 +234,7 @@ export default function (pi: ExtensionAPI) {
     isRecording = false;
     recordingProcess.kill("SIGTERM");
     recordingProcess = null;
-    ctx.ui.setStatus("mic", undefined);
+    stopVisualizer(ctx);
 
     // Give the recorder a moment to flush the file
     await new Promise((r) => setTimeout(r, 600));
@@ -276,7 +313,7 @@ export default function (pi: ExtensionAPI) {
     });
   });
 
-  pi.on("session_shutdown", async () => {
+  pi.on("session_shutdown", async (_event, ctx) => {
     if (micInputUnsub) {
       micInputUnsub();
       micInputUnsub = null;
@@ -284,6 +321,7 @@ export default function (pi: ExtensionAPI) {
     if (isRecording && recordingProcess) {
       recordingProcess.kill("SIGTERM");
       isRecording = false;
+      stopVisualizer(ctx);
     }
   });
 
