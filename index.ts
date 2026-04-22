@@ -190,7 +190,6 @@ export default function (pi: ExtensionAPI) {
   let isRecording = false;
   let recordingProcess: ChildProcess | null = null;
   let micInputUnsub: (() => void) | null = null;
-
   function startVisualizer(ctx: any): void {
     ctx.ui.setWidget(
       "mic",
@@ -209,14 +208,12 @@ export default function (pi: ExtensionAPI) {
 
   async function startRecording(ctx: any): Promise<void> {
     if (isRecording) return;
-    isRecording = true;
 
     const hasRec = await commandExists("rec");
     const hasArecord = await commandExists("arecord");
     const hasFfmpeg = await commandExists("ffmpeg");
 
     if (!hasRec && !hasArecord && !hasFfmpeg) {
-      isRecording = false;
       ctx.ui.notify("No audio recorder found. Install sox (rec), arecord, or ffmpeg.", "error");
       return;
     }
@@ -253,6 +250,7 @@ export default function (pi: ExtensionAPI) {
       recordingProcess = null;
     });
 
+    isRecording = true;
     ctx.ui.notify("🎤 Recording... press F12 to stop and send", "info");
     startVisualizer(ctx);
   }
@@ -260,8 +258,8 @@ export default function (pi: ExtensionAPI) {
   async function stopRecordingAndSend(ctx: any): Promise<void> {
     if (!isRecording || !recordingProcess) return;
 
-    recordingProcess.kill("SIGTERM");
     isRecording = false;
+    recordingProcess.kill("SIGTERM");
     recordingProcess = null;
     stopVisualizer(ctx);
 
@@ -497,7 +495,6 @@ IMPORTANT: When writing any text that will be spoken aloud (including explanatio
     if (!config.autoListen || !config.xaiApiKey) return;
     if (!(await commandExists("ffplay"))) return;
 
-    // Find the last assistant message in the agent's response
     const messages = event.messages || [];
     let lastText: string | null = null;
     for (let i = messages.length - 1; i >= 0; i--) {
