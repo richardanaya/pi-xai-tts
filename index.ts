@@ -190,13 +190,15 @@ export default function (pi: ExtensionAPI) {
   let isRecording = false;
   let recordingProcess: ChildProcess | null = null;
   let micInputUnsub: (() => void) | null = null;
+  let recordingTimeout: NodeJS.Timeout | null = null;
+  const MAX_RECORDING_DURATION_MS = 5 * 60 * 1000; // 5 minutes
   function startVisualizer(ctx: any): void {
     ctx.ui.setWidget(
       "mic",
       [
-        `┌──────────────────────────────────────────────────────┐`,
-        `│  🎤  Recording voice...  press F12 to stop & send  🎤  │`,
-        `└──────────────────────────────────────────────────────┘`,
+        `┌─────────────────────────────────────────────────────────────┐`,
+        `│  🎤  Recording...  press F12 to stop & send  (max 5 min)  🎤  │`,
+        `└─────────────────────────────────────────────────────────────┘`,
       ],
       { placement: "aboveEditor" }
     );
@@ -251,8 +253,35 @@ export default function (pi: ExtensionAPI) {
     });
 
     isRecording = true;
-    ctx.ui.notify("🎤 Recording... press F12 to stop and send", "info");
+    ctx.ui.notify("🎤 Recording... press F12 to stop and send (max 5 min)", "info");
     startVisualizer(ctx);
+
+    // Auto-stop after max duration - discard to prevent accidental long recordings
+    recordingTimeout = setTimeout(() => {
+      if (isRecording) {
+        void cancelRecordingForTooLong(ctx);
+      }
+    }, MAX_RECORDING_DURATION_MS);
+  }
+
+  async function cancelRecordingForTooLong(ctx: any): Promise<void> {
+    if (!isRecording || !recordingProcess) return;
+
+    isRecording = false;
+    recordingProcess.kill("SIGTERM");
+    recordingProcess = null;
+    stopVisualizer(ctx);
+
+    // Clear the auto-stop timeout
+    if (recordingTimeout) {
+      clearTimeout(recordingTimeout);
+      recordingTimeout = null;
+    }
+
+    ctx.ui.notify("Recording stopped — exceeded 5 minute limit. Message discarded to prevent accidental sends. Press F12 again to record a shorter message.", "warning");
+
+    // Clean up the temp file without sending
+    try { await unlink(MIC_TEMP_FILE); } catch { /* ignore */ }
   }
 
   async function stopRecordingAndSend(ctx: any): Promise<void> {
@@ -263,6 +292,12 @@ export default function (pi: ExtensionAPI) {
     recordingProcess = null;
     stopVisualizer(ctx);
 
+    // Clear the auto-stop timeout
+    if (recordingTimeout) {
+      clearTimeout(recordingTimeout);
+      recordingTimeout = null;
+    }
+
     // Give the recorder a moment to flush the file
     await new Promise((r) => setTimeout(r, 600));
 
@@ -271,12 +306,14 @@ export default function (pi: ExtensionAPI) {
       audioBuffer = await readFile(MIC_TEMP_FILE);
     } catch {
       ctx.ui.notify("Recording failed — no audio captured", "error");
+      await unlink(MIC_TEMP_FILE).catch(() => {});
       return;
     }
 
     const config = await loadConfig();
     if (!config.xaiApiKey) {
       ctx.ui.notify("Missing xaiApiKey for speech-to-text", "error");
+      await unlink(MIC_TEMP_FILE).catch(() => {});
       return;
     }
 
@@ -347,6 +384,10 @@ export default function (pi: ExtensionAPI) {
     if (micInputUnsub) {
       micInputUnsub();
       micInputUnsub = null;
+    }
+    if (recordingTimeout) {
+      clearTimeout(recordingTimeout);
+      recordingTimeout = null;
     }
     if (isRecording && recordingProcess) {
       recordingProcess.kill("SIGTERM");
