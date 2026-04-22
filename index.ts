@@ -18,6 +18,7 @@ async function loadConfig(): Promise<{
   language?: string;
   speed?: number;
   accent?: string;
+  autoListen?: boolean;
 }> {
   try {
     const data = await readFile(CONFIG_PATH, "utf8");
@@ -57,33 +58,81 @@ async function writeFileSynced(path: string, data: Buffer): Promise<void> {
 const DEFAULT_VOICE = "leo";
 const DEFAULT_LANGUAGE = "en";
 
-// Get last assistant message from session
+// Extract text from an assistant message
+function extractAssistantText(message: any): string | null {
+  if (message?.role !== "assistant") return null;
+  const content = message.content;
+  if (Array.isArray(content)) {
+    const textParts = content
+      .filter((part: any) => part.type === "text")
+      .map((part: any) => part.text);
+    if (textParts.length > 0) return textParts.join("\n");
+  } else if (typeof content === "string") {
+    return content;
+  }
+  return null;
+}
+
+// Get last assistant message from session entries
 function getLastAssistantMessage(ctx: any): string | null {
   const entries = ctx.sessionManager?.getEntries?.() || [];
-  
-  // Iterate backwards to find the last assistant message
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i];
-    
-    if (entry.type === "message" && entry.message?.role === "assistant") {
-      // Extract text content from the assistant message
-      const content = entry.message.content;
-      if (Array.isArray(content)) {
-        // Find text content parts
-        const textParts = content
-          .filter((part: any) => part.type === "text")
-          .map((part: any) => part.text);
-        
-        if (textParts.length > 0) {
-          return textParts.join("\n");
-        }
-      } else if (typeof content === "string") {
-        return content;
-      }
+    if (entry.type === "message") {
+      const text = extractAssistantText(entry.message);
+      if (text) return text;
     }
   }
-  
   return null;
+}
+
+// Generate TTS audio and play it
+async function speakText(
+  text: string,
+  config: Awaited<ReturnType<typeof loadConfig>>,
+  ctx: any,
+): Promise<void> {
+  const MAX_CHARS = 15000;
+  let textToSpeak = text;
+  if (textToSpeak.length > MAX_CHARS) {
+    textToSpeak = textToSpeak.slice(0, MAX_CHARS);
+    ctx.ui.notify("Message is very long, truncating to 15,000 characters...", "info");
+  }
+
+  ctx.ui.notify("Generating speech with xAI TTS...", "info");
+
+  const response = await fetch("https://api.x.ai/v1/tts", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${config.xaiApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      text: textToSpeak,
+      voice_id: config.voice || DEFAULT_VOICE,
+      language: config.language || DEFAULT_LANGUAGE,
+      output_format: {
+        codec: "mp3",
+        sample_rate: 24000,
+        bit_rate: 128000,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`xAI TTS API error: ${response.status} ${errorText}`);
+  }
+
+  const audioBuffer = await response.arrayBuffer();
+  await writeFileSynced(TEMP_FILE, Buffer.from(audioBuffer));
+  await playWithFfplay(TEMP_FILE, config.speed ?? 1.0);
+
+  setTimeout(() => {
+    unlink(TEMP_FILE).catch(() => {});
+  }, 5000);
+
+  ctx.ui.notify("Finished playing", "success");
 }
 
 // Play audio with ffplay (detached so it survives extension reloads)
@@ -141,6 +190,7 @@ export default function (pi: ExtensionAPI) {
   let isRecording = false;
   let recordingProcess: ChildProcess | null = null;
   let micInputUnsub: (() => void) | null = null;
+
   function startVisualizer(ctx: any): void {
     ctx.ui.setWidget(
       "mic",
@@ -159,12 +209,14 @@ export default function (pi: ExtensionAPI) {
 
   async function startRecording(ctx: any): Promise<void> {
     if (isRecording) return;
+    isRecording = true;
 
     const hasRec = await commandExists("rec");
     const hasArecord = await commandExists("arecord");
     const hasFfmpeg = await commandExists("ffmpeg");
 
     if (!hasRec && !hasArecord && !hasFfmpeg) {
+      isRecording = false;
       ctx.ui.notify("No audio recorder found. Install sox (rec), arecord, or ffmpeg.", "error");
       return;
     }
@@ -201,7 +253,6 @@ export default function (pi: ExtensionAPI) {
       recordingProcess = null;
     });
 
-    isRecording = true;
     ctx.ui.notify("🎤 Recording... press F12 to stop and send", "info");
     startVisualizer(ctx);
   }
@@ -209,8 +260,8 @@ export default function (pi: ExtensionAPI) {
   async function stopRecordingAndSend(ctx: any): Promise<void> {
     if (!isRecording || !recordingProcess) return;
 
-    isRecording = false;
     recordingProcess.kill("SIGTERM");
+    isRecording = false;
     recordingProcess = null;
     stopVisualizer(ctx);
 
@@ -235,10 +286,11 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.notify("Transcribing...", "info");
 
       const formData = new FormData();
+      formData.append("format", "true");
+      formData.append("language", config.language || "en");
       formData.append("file", new Blob([audioBuffer], { type: "audio/wav" }), "recording.wav");
-      formData.append("model", "grok-2-whisper");
 
-      const response = await fetch("https://api.x.ai/v1/audio/transcriptions", {
+      const response = await fetch("https://api.x.ai/v1/stt", {
         method: "POST",
         headers: { "Authorization": `Bearer ${config.xaiApiKey}` },
         body: formData,
@@ -358,13 +410,11 @@ IMPORTANT: When writing any text that will be spoken aloud (including explanatio
   pi.registerCommand("listen", {
     description: "Read aloud the last AI assistant message using xAI TTS",
     handler: async (_args, ctx) => {
-      // Check for UI availability
       if (!ctx.hasUI) {
         console.error("/listen is only available in interactive mode");
         return;
       }
 
-      // Check for ffplay
       if (!(await commandExists("ffplay"))) {
         ctx.ui.notify(
           "ffplay not found. Please install FFmpeg: https://ffmpeg.org/download.html",
@@ -373,83 +423,20 @@ IMPORTANT: When writing any text that will be spoken aloud (including explanatio
         return;
       }
 
-      // Load configuration
       const config = await loadConfig();
-      
-      if (!config.xaiApiKey && !Object.keys(config).length) {
-        ctx.ui.notify(
-          `Failed to load config from ${CONFIG_PATH}. Please create it with your xaiApiKey.`,
-          "error"
-        );
-        return;
-      }
-
       if (!config.xaiApiKey) {
-        ctx.ui.notify(
-          "Missing xaiApiKey in configuration file",
-          "error"
-        );
+        ctx.ui.notify("Missing xaiApiKey in configuration file", "error");
         return;
       }
 
-      // Get last assistant message
       const lastMessage = getLastAssistantMessage(ctx);
       if (!lastMessage) {
         ctx.ui.notify("No assistant message found to read aloud", "warning");
         return;
       }
 
-      // Truncate if too long (xAI TTS has 15,000 char limit)
-      const MAX_CHARS = 15000;
-      let textToSpeak = lastMessage;
-      if (textToSpeak.length > MAX_CHARS) {
-        textToSpeak = textToSpeak.slice(0, MAX_CHARS);
-        ctx.ui.notify("Message is very long, truncating to 15,000 characters...", "info");
-      }
-
-      // Notify user
-      ctx.ui.notify("Generating speech with xAI TTS...", "info");
-
       try {
-        // Call xAI TTS API
-        const response = await fetch("https://api.x.ai/v1/tts", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${config.xaiApiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            text: textToSpeak,
-            voice_id: config.voice || DEFAULT_VOICE,
-            language: config.language || DEFAULT_LANGUAGE,
-            output_format: {
-              codec: "mp3",
-              sample_rate: 24000,
-              bit_rate: 128000,
-            },
-          }),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`xAI TTS API error: ${response.status} ${errorText}`);
-        }
-
-        // Get audio data
-        const audioBuffer = await response.arrayBuffer();
-        
-        // Save to temp file with explicit extension - ensure fully synced before playback
-        await writeFileSynced(TEMP_FILE, Buffer.from(audioBuffer));
-
-        // Play audio with ffplay
-        await playWithFfplay(TEMP_FILE, config.speed ?? 1.0);
-
-        // Clean up temp file after a delay (give it time to start playing)
-        setTimeout(() => {
-          unlink(TEMP_FILE).catch(() => {});
-        }, 5000);
-
-        ctx.ui.notify("Finished playing", "success");
+        await speakText(lastMessage, config, ctx);
       } catch (error) {
         ctx.ui.notify(
           `Failed to generate or play speech: ${error instanceof Error ? error.message : String(error)}`,
@@ -457,6 +444,80 @@ IMPORTANT: When writing any text that will be spoken aloud (including explanatio
         );
       }
     },
+  });
+
+  pi.registerCommand("auto-listen-on", {
+    description: "Automatically read aloud each assistant response when it finishes",
+    handler: async (_args, ctx) => {
+      if (!ctx.hasUI) {
+        console.error("/auto-listen-on is only available in interactive mode");
+        return;
+      }
+
+      const config = await loadConfig();
+      if (!config.xaiApiKey) {
+        ctx.ui.notify("Missing xaiApiKey in configuration file", "error");
+        return;
+      }
+
+      if (!(await commandExists("ffplay"))) {
+        ctx.ui.notify(
+          "ffplay not found. Please install FFmpeg: https://ffmpeg.org/download.html",
+          "error"
+        );
+        return;
+      }
+
+      config.autoListen = true;
+      await saveConfig(config);
+      ctx.ui.notify("Auto-listen enabled — assistant responses will be read aloud automatically", "success");
+    },
+  });
+
+  pi.registerCommand("auto-listen-off", {
+    description: "Disable automatic read-aloud of assistant responses",
+    handler: async (_args, ctx) => {
+      if (!ctx.hasUI) {
+        console.error("/auto-listen-off is only available in interactive mode");
+        return;
+      }
+
+      const config = await loadConfig();
+      config.autoListen = false;
+      await saveConfig(config);
+      ctx.ui.notify("Auto-listen disabled", "info");
+    },
+  });
+
+  // Auto-listen: play TTS on the final assistant message when agent finishes
+  pi.on("agent_end", async (event, ctx) => {
+    if (!ctx.hasUI) return;
+
+    const config = await loadConfig();
+    if (!config.autoListen || !config.xaiApiKey) return;
+    if (!(await commandExists("ffplay"))) return;
+
+    // Find the last assistant message in the agent's response
+    const messages = event.messages || [];
+    let lastText: string | null = null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const text = extractAssistantText(messages[i]);
+      if (text) {
+        lastText = text;
+        break;
+      }
+    }
+
+    if (!lastText) return;
+
+    try {
+      await speakText(lastText, config, ctx);
+    } catch (error) {
+      ctx.ui.notify(
+        `Auto-listen failed: ${error instanceof Error ? error.message : String(error)}`,
+        "error"
+      );
+    }
   });
 
   pi.registerCommand("listen-stop", {
