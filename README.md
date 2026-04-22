@@ -48,9 +48,25 @@ After the AI responds to your message, type `/listen` to hear the last assistant
 
 To stop playback early, type `/listen-stop`.
 
+### Auto-Listen
+
+To automatically hear every assistant response without typing `/listen` each time:
+
+```
+/auto-listen-on
+```
+
+To disable automatic playback:
+
+```
+/auto-listen-off
+```
+
 ### Voice Input (Speech-to-Text)
 
-Press **F12** to start recording your voice. Press **F12** again to stop — the audio is transcribed via xAI and sent as your prompt.
+Press **F12** to start recording your voice. A mic widget appears above the editor while recording. Press **F12** again to stop — the audio is transcribed via xAI and sent as your prompt.
+
+**F12 also stops playback.** If the assistant is currently speaking, pressing F12 will stop the audio immediately.
 
 ### Accent / Dialect Mode
 
@@ -89,6 +105,12 @@ The accent is persisted in your config file and injected into the system prompt 
 
 # Remove it later
 /remove-accent
+
+# Auto-play every assistant response
+/auto-listen-on
+
+# Return to manual playback
+/auto-listen-off
 ```
 
 ## Requirements

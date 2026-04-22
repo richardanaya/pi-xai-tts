@@ -325,11 +325,18 @@ export default function (pi: ExtensionAPI) {
 
     micInputUnsub = ctx.ui.onTerminalInput((data) => {
       if (matchesKey(data, Key.f12)) {
-        if (isRecording) {
-          void stopRecordingAndSend(ctx);
-        } else {
-          void startRecording(ctx);
-        }
+        void (async () => {
+          const killed = await killExistingPlayback();
+          if (killed) {
+            ctx.ui.notify("Stopped listening", "info");
+          } else {
+            if (isRecording) {
+              await stopRecordingAndSend(ctx);
+            } else {
+              await startRecording(ctx);
+            }
+          }
+        })();
         return { consume: true };
       }
       return undefined;

@@ -1,6 +1,6 @@
 {
   "name": "pi-xai-tts",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "A pi extension to read aloud the last AI assistant output using xAI TTS",
   "license": "MIT",
   "author": "Richard Anaya",
