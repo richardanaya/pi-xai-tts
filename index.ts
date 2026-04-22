@@ -1,13 +1,15 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { isKeyRelease, Key, matchesKey } from "@mariozechner/pi-tui";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readFile, writeFile, unlink, open } from "node:fs/promises";
-import { exec, spawn } from "node:child_process";
+import { exec, spawn, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 
 const execAsync = promisify(exec);
 const CONFIG_PATH = join(homedir(), ".pi", "xai-tts.json");
 const TEMP_FILE = join(homedir(), ".pi", "xai-tts-temp.mp3");
+const MIC_TEMP_FILE = join(homedir(), ".pi", "xai-tts-mic.wav");
 
 // Load config from disk
 async function loadConfig(): Promise<{
@@ -136,6 +138,170 @@ async function killExistingPlayback(): Promise<boolean> {
 }
 
 export default function (pi: ExtensionAPI) {
+  let isRecording = false;
+  let recordingProcess: ChildProcess | null = null;
+  let micInputUnsub: (() => void) | null = null;
+
+  async function startRecording(ctx: any): Promise<void> {
+    if (isRecording) return;
+
+    const hasRec = await commandExists("rec");
+    const hasArecord = await commandExists("arecord");
+    const hasFfmpeg = await commandExists("ffmpeg");
+
+    if (!hasRec && !hasArecord && !hasFfmpeg) {
+      ctx.ui.notify("No audio recorder found. Install sox (rec), arecord, or ffmpeg.", "error");
+      return;
+    }
+
+    let cmd: string;
+    let args: string[];
+
+    if (hasRec) {
+      cmd = "rec";
+      args = ["-q", "-c", "1", "-r", "16000", "-b", "16", "-e", "signed-integer", MIC_TEMP_FILE];
+    } else if (hasArecord) {
+      cmd = "arecord";
+      args = ["-f", "S16_LE", "-r", "16000", "-c", "1", "-t", "wav", MIC_TEMP_FILE];
+    } else {
+      cmd = "ffmpeg";
+      if (process.platform === "darwin") {
+        args = ["-f", "avfoundation", "-i", ":0", "-ar", "16000", "-ac", "1", "-y", MIC_TEMP_FILE];
+      } else {
+        args = ["-f", "alsa", "-i", "default", "-ar", "16000", "-ac", "1", "-y", MIC_TEMP_FILE];
+      }
+    }
+
+    // Clean up any stale recording file
+    try { await unlink(MIC_TEMP_FILE); } catch { /* ignore */ }
+
+    recordingProcess = spawn(cmd, args, { stdio: "ignore" });
+
+    recordingProcess.on("error", () => {
+      isRecording = false;
+      ctx.ui.setStatus("mic", undefined);
+    });
+
+    recordingProcess.on("exit", () => {
+      recordingProcess = null;
+    });
+
+    isRecording = true;
+    ctx.ui.notify("🎤 Recording... release Ctrl+M to send", "info");
+    ctx.ui.setStatus("mic", "🎤 Recording...");
+  }
+
+  async function stopRecordingAndSend(ctx: any): Promise<void> {
+    if (!isRecording || !recordingProcess) return;
+
+    isRecording = false;
+    recordingProcess.kill("SIGTERM");
+    recordingProcess = null;
+    ctx.ui.setStatus("mic", undefined);
+
+    // Give the recorder a moment to flush the file
+    await new Promise((r) => setTimeout(r, 600));
+
+    let audioBuffer: Buffer;
+    try {
+      audioBuffer = await readFile(MIC_TEMP_FILE);
+    } catch {
+      ctx.ui.notify("Recording failed — no audio captured", "error");
+      return;
+    }
+
+    const config = await loadConfig();
+    if (!config.xaiApiKey) {
+      ctx.ui.notify("Missing xaiApiKey for speech-to-text", "error");
+      return;
+    }
+
+    try {
+      ctx.ui.notify("Transcribing...", "info");
+
+      const formData = new FormData();
+      formData.append("file", new Blob([audioBuffer], { type: "audio/wav" }), "recording.wav");
+      formData.append("model", "grok-2-whisper");
+
+      const response = await fetch("https://api.x.ai/v1/audio/transcriptions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${config.xaiApiKey}` },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`STT API error: ${response.status} ${errorText}`);
+      }
+
+      const result = (await response.json()) as { text?: string };
+      const text = result.text?.trim();
+
+      if (!text) {
+        ctx.ui.notify("No speech detected", "warning");
+        return;
+      }
+
+      ctx.ui.notify(`🎤 Heard: "${text}"`, "success");
+      pi.sendUserMessage(text);
+    } catch (error) {
+      ctx.ui.notify(
+        `Transcription failed: ${error instanceof Error ? error.message : String(error)}`,
+        "error"
+      );
+    } finally {
+      unlink(MIC_TEMP_FILE).catch(() => {});
+    }
+  }
+
+  // Wire up Ctrl+M hold-to-record in interactive mode
+  pi.on("session_start", async (_event, ctx) => {
+    if (!ctx.hasUI) return;
+
+    micInputUnsub = ctx.ui.onTerminalInput((data) => {
+      if (!isRecording) {
+        if (matchesKey(data, Key.ctrl("m"))) {
+          void startRecording(ctx);
+          return { consume: true };
+        }
+        return undefined;
+      }
+
+      // Recording in progress — consume all keystrokes so the user doesn't type into the editor
+      if (isKeyRelease(data) && matchesKey(data, Key.ctrl("m"))) {
+        void stopRecordingAndSend(ctx);
+        return { consume: true };
+      }
+      return { consume: true };
+    });
+  });
+
+  pi.on("session_shutdown", async () => {
+    if (micInputUnsub) {
+      micInputUnsub();
+      micInputUnsub = null;
+    }
+    if (isRecording && recordingProcess) {
+      recordingProcess.kill("SIGTERM");
+      isRecording = false;
+    }
+  });
+
+  pi.registerCommand("mic", {
+    description: "Toggle microphone recording (press to start, press again to stop and send)",
+    handler: async (_args, ctx) => {
+      if (!ctx.hasUI) {
+        console.error("/mic is only available in interactive mode");
+        return;
+      }
+      if (isRecording) {
+        await stopRecordingAndSend(ctx);
+      } else {
+        await startRecording(ctx);
+      }
+    },
+  });
+
   pi.registerCommand("add-accent", {
     description: "Add a speaking accent/dialect to the AI's responses (e.g., 'talk like a pirate')",
     handler: async (args, ctx) => {

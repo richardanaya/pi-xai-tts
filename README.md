@@ -1,6 +1,6 @@
 # pi-xai-tts
 
-A pi extension that reads aloud the last AI assistant output using xAI's Text-to-Speech API.
+A pi extension for voice interaction: speech-to-text input via microphone, and text-to-speech playback of assistant responses — powered by xAI.
 
 ## Installation
 
@@ -48,6 +48,20 @@ After the AI responds to your message, type `/listen` to hear the last assistant
 
 To stop playback early, type `/listen-stop`.
 
+### Voice Input (Speech-to-Text)
+
+Hold **Ctrl+M** to record your voice. Release to stop — the audio is transcribed via xAI and sent as your prompt.
+
+If your terminal doesn't distinguish `Ctrl+M` from `Enter`, use the `/mic` command instead:
+
+```
+# Start recording
+/mic
+
+# Stop recording — transcription is sent automatically
+/mic
+```
+
 ### Accent / Dialect Mode
 
 To make the AI speak with a specific accent or dialect (affecting both text responses and TTS output):
@@ -78,6 +92,8 @@ The accent is persisted in your config file and injected into the system prompt 
 # Stop playback early if needed
 /listen-stop
 
+# Hold Ctrl+M, speak, then release to send a voice message
+
 # Enable pirate speak for all future responses
 /add-accent talk like a pirate
 
@@ -87,29 +103,34 @@ The accent is persisted in your config file and injected into the system prompt 
 
 ## Requirements
 
-This extension requires **FFmpeg** to be installed, specifically the `ffplay` command.
+### Playback (TTS)
+Requires **FFmpeg** to be installed, specifically the `ffplay` command.
 
-### Installing FFmpeg
-
-- **macOS**:
-  ```bash
-  brew install ffmpeg
-  ```
-
-- **Ubuntu/Debian**:
-  ```bash
-  sudo apt-get install ffmpeg
-  ```
-
-- **Fedora**:
-  ```bash
-  sudo dnf install ffmpeg
-  ```
-
+- **macOS**: `brew install ffmpeg`
+- **Ubuntu/Debian**: `sudo apt-get install ffmpeg`
+- **Fedora**: `sudo dnf install ffmpeg`
 - **Windows**: Download from https://ffmpeg.org/download.html and add to PATH
+
+### Voice Input (STT)
+Requires one of the following audio recording tools:
+
+- **sox** (preferred — most portable)
+  - macOS: `brew install sox`
+  - Ubuntu/Debian: `sudo apt-get install sox libsox-fmt-all`
+  - Fedora: `sudo dnf install sox`
+
+- **arecord** (Linux ALSA, usually pre-installed)
+
+- **ffmpeg** (also used for playback)
 
 ## API Reference
 
-This extension uses the xAI Text-to-Speech API:
-- Endpoint: `POST https://api.x.ai/v1/tts`
-- Documentation: https://docs.x.ai/developers/model-capabilities/audio/text-to-speech
+This extension uses xAI's audio APIs:
+
+- **Text-to-Speech**
+  - Endpoint: `POST https://api.x.ai/v1/tts`
+  - Docs: https://docs.x.ai/developers/model-capabilities/audio/text-to-speech
+
+- **Speech-to-Text**
+  - Endpoint: `POST https://api.x.ai/v1/audio/transcriptions`
+  - Docs: https://docs.x.ai/developers/model-capabilities/audio/speech-to-text
