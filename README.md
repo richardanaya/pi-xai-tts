@@ -52,16 +52,6 @@ To stop playback early, type `/listen-stop`.
 
 Hold **Ctrl+M** to record your voice. Release to stop — the audio is transcribed via xAI and sent as your prompt.
 
-If your terminal doesn't distinguish `Ctrl+M` from `Enter`, use the `/mic` command instead:
-
-```
-# Start recording
-/mic
-
-# Stop recording — transcription is sent automatically
-/mic
-```
-
 ### Accent / Dialect Mode
 
 To make the AI speak with a specific accent or dialect (affecting both text responses and TTS output):
@@ -92,7 +82,7 @@ The accent is persisted in your config file and injected into the system prompt 
 # Stop playback early if needed
 /listen-stop
 
-# Hold Ctrl+M, speak, then release to send a voice message
+# Hold Ctrl+M, speak, then release to transcribe and send
 
 # Enable pirate speak for all future responses
 /add-accent talk like a pirate

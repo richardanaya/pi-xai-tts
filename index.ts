@@ -287,21 +287,6 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
-  pi.registerCommand("mic", {
-    description: "Toggle microphone recording (press to start, press again to stop and send)",
-    handler: async (_args, ctx) => {
-      if (!ctx.hasUI) {
-        console.error("/mic is only available in interactive mode");
-        return;
-      }
-      if (isRecording) {
-        await stopRecordingAndSend(ctx);
-      } else {
-        await startRecording(ctx);
-      }
-    },
-  });
-
   pi.registerCommand("add-accent", {
     description: "Add a speaking accent/dialect to the AI's responses (e.g., 'talk like a pirate')",
     handler: async (args, ctx) => {
