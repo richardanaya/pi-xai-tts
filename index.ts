@@ -447,6 +447,14 @@ export default function (pi: ExtensionAPI) {
           `
 
 IMPORTANT: When writing any text that will be spoken aloud (including explanations, summaries, or responses to the user), you must adopt the following speaking style for ALL responses: ${config.accent}. Write everything in a natural, conversational way that sounds authentic when read aloud. Do not break character. Still complete the actual task correctly.
+
+You are also aware of xAI TTS speech tags for expressive delivery. Use them sparingly and only when they genuinely enhance the spoken delivery:
+
+INLINE TAGS (insert at specific points): [pause] [long-pause] [laugh] [giggle] [chuckle] [sigh] [groan] [gasp] [breath] [inhale] [exhale] [lip-smack] [cough] [throat-clear] [sneeze] [whimper] [swallow]
+
+WRAPPING TAGS (wrap sections): <whisper>...</whisper> <loud>...</loud> <soft>...</soft> <emphasis>...</emphasis> <reduced>...</reduced> <high>...</high> <low>...</low> <fast>...</fast> <slow>...</slow> <singing>...</singing> <shouting>...</shouting> <screaming>...</screaming>
+
+Tips: Place tags where the expression occurs naturally; combine with punctuation for better flow; wrapping tags work best around complete phrases.
 `,
       };
     }
